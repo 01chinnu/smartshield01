@@ -9,22 +9,21 @@ from sklearn.ensemble import IsolationForest
 st.set_page_config(page_title="SmartShield IDS", layout="centered")
 
 # --- AUTHENTICATION ---
+# --- AUTHENTICATION ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    password = st.text_input("🔐 Enter admin password:", type="password")
-    login_btn = st.button("Login")
+    st.subheader("🔐 Admin Login Required")
+    password = st.text_input("Enter admin password:", type="password")
+    if password == "smartshield2025":
+        st.session_state.authenticated = True
+        st.success("✅ Access granted! Scroll down to continue.")
+        st.info("👇 Continue below to use SmartShield")
 
-    if login_btn:
-        if password == "smartshield2025":
-            st.session_state.authenticated = True
-            st.success("✅ Access granted!")
-            st.experimental_rerun()
-        else:
-            st.error("❌ Incorrect password")
-    st.stop()
-
+    else:
+        st.warning("Waiting for correct password...")
+        st.stop()
 
 # --- TITLE ---
 st.title("\U0001f512 SmartShield – Intrusion Detection System")
