@@ -49,38 +49,39 @@ if uploaded_file:
     st.subheader("⚠️ Suspicious Entries")
     st.dataframe(df[df['anomaly_label'] == "⚠️ Suspicious"])
 
-    # --- GRAPHS ---
-    st.subheader("📈 Suspicion Score Over Time")
-    df['suspicion_score'] = df['bytes_sent'] + df['bytes_received']
-    df['log_index'] = df.index
+    # --- CONDITIONAL VISUALS ---
+    st.markdown("---")
+    st.subheader("📊 Visualizations")
 
-    fig1, ax1 = plt.subplots()
-    ax1.plot(df['log_index'], df['suspicion_score'], color='orange')
-    ax1.set_xlabel("Log Entry Index")
-    ax1.set_ylabel("Suspicion Score")
-    ax1.set_title("Suspicion Score Trend")
-    st.pyplot(fig1)
+    if st.checkbox("📈 Show Suspicion Score Over Time"):
+        df['suspicion_score'] = df['bytes_sent'] + df['bytes_received']
+        df['log_index'] = df.index
+        fig1, ax1 = plt.subplots()
+        ax1.plot(df['log_index'], df['suspicion_score'], color='orange')
+        ax1.set_xlabel("Log Entry Index")
+        ax1.set_ylabel("Suspicion Score")
+        ax1.set_title("Suspicion Score Trend")
+        st.pyplot(fig1)
 
-    st.subheader("📊 Anomalies by User")
-    fig2, ax2 = plt.subplots(figsize=(12, 5))
-    sns.countplot(data=df[df['anomaly_label'] == "⚠️ Suspicious"], x='username', ax=ax2)
-    ax2.set_title("Suspicious Activity Count per User")
-    ax2.set_xlabel("Username")
-    ax2.set_ylabel("Suspicious Records")
-    plt.xticks(rotation=45, ha='right')
-    st.pyplot(fig2)
+    if st.checkbox("📊 Show Anomalies by User"):
+        fig2, ax2 = plt.subplots(figsize=(12, 5))
+        sns.countplot(data=df[df['anomaly_label'] == "⚠️ Suspicious"], x='username', ax=ax2)
+        ax2.set_title("Suspicious Activity Count per User")
+        ax2.set_xlabel("Username")
+        ax2.set_ylabel("Suspicious Records")
+        plt.xticks(rotation=45, ha='right')
+        st.pyplot(fig2)
 
-
-    st.subheader("📊 Normal vs Suspicious Entries")
-    labels = ['Normal', 'Suspicious']
-    sizes = [
-        len(df[df['anomaly_label'] == "✅ Normal"]),
-        len(df[df['anomaly_label'] == "⚠️ Suspicious"])
-    ]
-    fig3, ax3 = plt.subplots()
-    ax3.pie(sizes, labels=labels, autopct='%1.1f%%', colors=['green', 'red'])
-    ax3.set_title("Anomaly Distribution")
-    st.pyplot(fig3)
+    if st.checkbox("🥧 Show Normal vs Suspicious Distribution"):
+        labels = ['Normal', 'Suspicious']
+        sizes = [
+            len(df[df['anomaly_label'] == "✅ Normal"]),
+            len(df[df['anomaly_label'] == "⚠️ Suspicious"])
+        ]
+        fig3, ax3 = plt.subplots()
+        ax3.pie(sizes, labels=labels, autopct='%1.1f%%', colors=['green', 'red'])
+        ax3.set_title("Anomaly Distribution")
+        st.pyplot(fig3)
 
     # --- LIVE SIMULATION ---
     st.subheader("📡 Live Detection Simulation")
