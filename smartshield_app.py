@@ -38,15 +38,23 @@ def save_to_history(df, original_filename):
     file_id = f"{original_filename}__{timestamp}"
     csv_path = os.path.join(HISTORY_DIR, f"{file_id}.csv")
     json_path = os.path.join(HISTORY_DIR, f"{file_id}.json")
-    df.to_csv(csv_path, index=False)
+
+    # Encrypt CSV data
+    csv_data = df.to_csv(index=False).encode()
+    with open(csv_path, "wb") as f:
+        f.write(fernet.encrypt(csv_data))
+
+    # Encrypt metadata
     metadata = {
         "display_name": original_filename,
         "file_id": file_id,
         "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "record_count": len(df)
     }
-    with open(json_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+    meta_data_str = json.dumps(metadata, indent=2).encode()
+    with open(json_path, "wb") as f:
+        f.write(fernet.encrypt(meta_data_str))
+
 
 def list_saved_histories():
     items = []
