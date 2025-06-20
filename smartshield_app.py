@@ -43,8 +43,7 @@ def list_saved_histories():
     return sorted(items, key=lambda x: x[1]["uploaded_at"], reverse=True)
 
 def load_history_df(file_id):
-    csv_path = os.path.join(HISTORY_DIR, f"{file_id}.csv")
-    return pd.read_csv(csv_path)
+    return pd.read_csv(os.path.join(HISTORY_DIR, f"{file_id}.csv"))
 
 def delete_history_item(file_id):
     os.remove(os.path.join(HISTORY_DIR, f"{file_id}.csv"))
@@ -124,17 +123,8 @@ authenticator = stauth.Authenticate(
     config["cookie"]["expiry_days"]
 )
 
-st.subheader("🔐 Login to SmartShield")
-name, authentication_status, username = authenticator.login(location="main")
-
-if authentication_status:
-    st.success(f"Welcome {name} 👋")
-    authenticator.logout("Logout", "sidebar")
-elif authentication_status is False:
-    st.error("Incorrect username or password")
-elif authentication_status is None:
-    st.warning("Please enter your credentials")
-
+# ✅ Use compatible login syntax
+name, authentication_status, username = authenticator.login("Login", "main")
 
 # --- MAIN APP ---
 if authentication_status:
@@ -161,7 +151,7 @@ if authentication_status:
         clear_history()
         st.experimental_rerun()
 
-    # Load selected history or upload new
+    # Upload / Load logic
     uploaded_file = st.file_uploader("📤 Upload CSV File", type=["csv"])
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
@@ -177,7 +167,7 @@ if authentication_status:
         st.subheader("📄 Uploaded Data")
         st.dataframe(df)
 
-        # --- Anomaly Detection ---
+        # Anomaly Detection
         with st.spinner("Analyzing with AI..."):
             model = IsolationForest(contamination=0.2, random_state=42)
             model.fit(df.select_dtypes(include=np.number))
@@ -190,7 +180,7 @@ if authentication_status:
         st.subheader("⚠️ Suspicious Entries")
         st.dataframe(df[df['anomaly_label'] == "⚠️ Suspicious"])
 
-        # --- Charts ---
+        # Charts
         if st.checkbox("📈 Suspicion Score Over Time"):
             df['suspicion_score'] = df['bytes_sent'] + df['bytes_received']
             df['log_index'] = df.index
@@ -216,19 +206,19 @@ if authentication_status:
             ax3.pie(sizes, labels=labels, autopct='%1.1f%%', colors=['green', 'red'])
             st.pyplot(fig3)
 
-        # --- Live Detection ---
+        # Live detection
         st.subheader("📡 Live Detection Simulation")
         for i in range(min(20, len(df))):
             log = df.iloc[i]
             st.write(f"👤 {log.get('username', 'Unknown')} | 🕒 {log['login_time']} | {log['anomaly_label']}")
             time.sleep(0.1)
 
-        # --- Download Report ---
+        # Download
         st.subheader("📥 Download Anomaly Report")
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button("Download CSV", csv, "anomaly_report.csv", "text/csv")
 
-        # --- Stats ---
+        # Stats
         st.subheader("📊 Stats Overview")
         st.metric("🔍 Total Records", len(df))
         st.metric("⚠️ Anomalies", len(df[df['anomaly_label'] == "⚠️ Suspicious"]))
