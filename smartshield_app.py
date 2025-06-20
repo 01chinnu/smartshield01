@@ -60,13 +60,20 @@ def list_saved_histories():
     items = []
     for file in os.listdir(HISTORY_DIR):
         if file.endswith(".json"):
-            with open(os.path.join(HISTORY_DIR, file), "r") as f:
-                metadata = json.load(f)
+            path = os.path.join(HISTORY_DIR, file)
+            with open(path, "rb") as f:
+                decrypted = fernet.decrypt(f.read()).decode()
+                metadata = json.loads(decrypted)
                 items.append((metadata["file_id"], metadata["display_name"], metadata))
     return sorted(items, key=lambda x: x[2]["uploaded_at"], reverse=True)
 
+
 def load_history_df(file_id):
-    return pd.read_csv(os.path.join(HISTORY_DIR, f"{file_id}.csv"))
+    with open(os.path.join(HISTORY_DIR, f"{file_id}.csv"), "rb") as f:
+        decrypted = fernet.decrypt(f.read()).decode()
+    from io import StringIO
+    return pd.read_csv(StringIO(decrypted))
+
 
 def delete_history_item(file_id):
     os.remove(os.path.join(HISTORY_DIR, f"{file_id}.csv"))
