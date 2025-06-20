@@ -62,12 +62,14 @@ if uploaded_file:
     st.pyplot(fig1)
 
     st.subheader("📊 Anomalies by User")
-    fig2, ax2 = plt.subplots()
+    fig2, ax2 = plt.subplots(figsize=(12, 5))
     sns.countplot(data=df[df['anomaly_label'] == "⚠️ Suspicious"], x='username', ax=ax2)
     ax2.set_title("Suspicious Activity Count per User")
     ax2.set_xlabel("Username")
     ax2.set_ylabel("Suspicious Records")
+    plt.xticks(rotation=45, ha='right')
     st.pyplot(fig2)
+
 
     st.subheader("📊 Normal vs Suspicious Entries")
     labels = ['Normal', 'Suspicious']
