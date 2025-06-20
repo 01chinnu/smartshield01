@@ -125,7 +125,11 @@ authenticator = stauth.Authenticate(
 )
 
 st.subheader("🔐 Login to SmartShield")
-name, authentication_status, username = authenticator.login(location="main")
+authenticator.login(location="main")
+
+if authenticator.authentication_status:
+    st.success(f"Welcome {authenticator.name} 👋")
+    username = authenticator.username
 
 # --- MAIN APP ---
 if authentication_status:
