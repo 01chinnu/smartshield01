@@ -125,11 +125,16 @@ authenticator = stauth.Authenticate(
 )
 
 st.subheader("🔐 Login to SmartShield")
-authenticator.login(location="main")
+name, authentication_status, username = authenticator.login(location="main")
 
-if authenticator.authentication_status:
-    st.success(f"Welcome {authenticator.name} 👋")
-    username = authenticator.username
+if authentication_status:
+    st.success(f"Welcome {name} 👋")
+    authenticator.logout("Logout", "sidebar")
+elif authentication_status is False:
+    st.error("Incorrect username or password")
+elif authentication_status is None:
+    st.warning("Please enter your credentials")
+
 
 # --- MAIN APP ---
 if authentication_status:
