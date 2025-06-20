@@ -6,15 +6,19 @@ SmartShield is a cloud-based Streamlit app that uses machine learning to detect 
 
 🚀 Features
 
-* 📄 Upload network log CSV files
+* 📤 Upload network log CSV files
 * 🤖 AI-powered anomaly detection (Isolation Forest)
-* 🔥 Heatmap of suspicious behavior
-* 🛁 Real-time style log simulation
+* 📊 Graphs for suspicious behavior:
+
+  * Line chart of suspicion scores
+  * Pie chart of anomaly distribution
+  * Bar chart of suspicious activity by user
+* 📡 Real-time style log simulation
 * 📈 Stats panel with total vs anomalous logs
-* 📅 Downloadable anomaly report (CSV)
+* 📥 Downloadable anomaly report (CSV)
 * 🔐 Admin login for secure access
 * 🧪 Fake log generator for demos
-* ⚖️ Optional CLI-based model script (`smartshield_model.py`) for testing/validation
+* ⚙️ Optional CLI-based model script (`smartshield_model.py`) for testing/validation
 
 ---
 
@@ -65,11 +69,11 @@ SmartShield helps IT administrators at colleges/offices:
 * Identify abnormal login times
 * Detect unusual data transfers
 * Flag potential brute-force or data exfiltration events
-* Visually monitor activity patterns
+* Visually monitor activity patterns with graphs
 
 ---
 
-👨‍💼 Authors
+👨‍💻 Authors
 
 * N. Lahiri
 * Built for Hackathon 2025
