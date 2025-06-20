@@ -11,25 +11,21 @@ import json
 import os
 from datetime import datetime
 from yaml.loader import SafeLoader
-
 from cryptography.fernet import Fernet
-
-# Load or generate encryption key
-KEY_FILE = "secret.key"
-if not os.path.exists(KEY_FILE):
-    with open(KEY_FILE, "wb") as f:
-        f.write(Fernet.generate_key())
-
-with open(KEY_FILE, "rb") as f:
-    key = f.read()
-
-fernet = Fernet(key)
-
 
 # --- CONFIG ---
 st.set_page_config(page_title="SmartShield IDS", layout="wide")
 
-# --- HISTORY SETUP ---
+# --- ENCRYPTION ---
+KEY_FILE = "secret.key"
+if not os.path.exists(KEY_FILE):
+    with open(KEY_FILE, "wb") as f:
+        f.write(Fernet.generate_key())
+with open(KEY_FILE, "rb") as f:
+    key = f.read()
+fernet = Fernet(key)
+
+# --- HISTORY ---
 HISTORY_DIR = "history"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 
@@ -39,41 +35,35 @@ def save_to_history(df, original_filename):
     csv_path = os.path.join(HISTORY_DIR, f"{file_id}.csv")
     json_path = os.path.join(HISTORY_DIR, f"{file_id}.json")
 
-    # Encrypt CSV data
     csv_data = df.to_csv(index=False).encode()
     with open(csv_path, "wb") as f:
         f.write(fernet.encrypt(csv_data))
 
-    # Encrypt metadata
     metadata = {
         "display_name": original_filename,
         "file_id": file_id,
         "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "record_count": len(df)
     }
-    meta_data_str = json.dumps(metadata, indent=2).encode()
+    json_data = json.dumps(metadata, indent=2).encode()
     with open(json_path, "wb") as f:
-        f.write(fernet.encrypt(meta_data_str))
-
+        f.write(fernet.encrypt(json_data))
 
 def list_saved_histories():
     items = []
     for file in os.listdir(HISTORY_DIR):
         if file.endswith(".json"):
-            path = os.path.join(HISTORY_DIR, file)
-            with open(path, "rb") as f:
+            with open(os.path.join(HISTORY_DIR, file), "rb") as f:
                 decrypted = fernet.decrypt(f.read()).decode()
                 metadata = json.loads(decrypted)
                 items.append((metadata["file_id"], metadata["display_name"], metadata))
     return sorted(items, key=lambda x: x[2]["uploaded_at"], reverse=True)
-
 
 def load_history_df(file_id):
     with open(os.path.join(HISTORY_DIR, f"{file_id}.csv"), "rb") as f:
         decrypted = fernet.decrypt(f.read()).decode()
     from io import StringIO
     return pd.read_csv(StringIO(decrypted))
-
 
 def delete_history_item(file_id):
     os.remove(os.path.join(HISTORY_DIR, f"{file_id}.csv"))
@@ -83,7 +73,7 @@ def clear_history():
     for file in os.listdir(HISTORY_DIR):
         os.remove(os.path.join(HISTORY_DIR, file))
 
-# --- SIGNUP ---
+# --- USER AUTH & SIGNUP ---
 def register_user():
     st.subheader("📝 Sign Up")
     new_name = st.text_input("Full Name")
@@ -94,7 +84,7 @@ def register_user():
     if st.button("Register"):
         if new_password != confirm:
             st.error("❌ Passwords do not match")
-        elif not new_username or not new_password or not new_email or not new_name:
+        elif not all([new_name, new_username, new_email, new_password]):
             st.error("❌ All fields are required")
         else:
             if os.path.exists("users.json"):
@@ -115,13 +105,10 @@ def register_user():
                     json.dump(users, f, indent=2)
                 st.success("✅ Registration successful. You can now log in.")
 
-# --- SIGNUP TOGGLE ---
 if "signup_mode" not in st.session_state:
     st.session_state.signup_mode = False
-
 if st.sidebar.button("🔄 Toggle Sign Up / Login"):
     st.session_state.signup_mode = not st.session_state.signup_mode
-
 if st.session_state.signup_mode:
     register_user()
     st.stop()
@@ -159,39 +146,85 @@ name, authentication_status, username = authenticator.login("Login", "main")
 if authentication_status:
     st.sidebar.markdown(f"👋 Welcome **{name}**")
     authenticator.logout("Logout", "sidebar")
-
     st.title("🔐 SmartShield – Intrusion Detection System")
 
-    # Sidebar: History Viewer
-    st.sidebar.markdown("### 🕓 History")
+    # --- SIDEBAR HISTORY + BENCHMARK SELECT ---
     history = list_saved_histories()
     selected_log = None
+    selected_logs = []
 
+    st.sidebar.markdown("### 🕓 History (Select to Compare)")
     for file_id, display_name, meta in history:
-        col1, col2 = st.sidebar.columns([0.85, 0.15])
-        if col1.button(f"📄 {display_name}", key=file_id):
-            selected_log = file_id
-        if col2.button("🗑️", key=file_id + "_del"):
+        checkbox_key = f"check_{file_id}"
+        if st.sidebar.checkbox(display_name, key=checkbox_key):
+            selected_logs.append(file_id)
+        if st.sidebar.button(f"🗑️ Delete {display_name}", key=file_id + "_del"):
             delete_history_item(file_id)
             st.experimental_rerun()
 
-    if history and st.sidebar.button("🧹 Clear History"):
+    if history and st.sidebar.button("🧹 Clear All History"):
         clear_history()
         st.experimental_rerun()
 
-    # Upload or Load
+    # 🧪 Compare Logs
+    if selected_logs and st.sidebar.button("📊 Compare Selected Logs"):
+        st.session_state["benchmark_mode"] = selected_logs
+
+    # 🧪 BENCHMARK MODE
+    if "benchmark_mode" in st.session_state:
+        selected_ids = st.session_state["benchmark_mode"]
+        st.subheader("📊 Benchmark Mode – Log Comparison")
+
+        summary_rows = []
+        for file_id in selected_ids:
+            df_bench = load_history_df(file_id)
+            model = IsolationForest(contamination=0.2, random_state=42)
+            model.fit(df_bench.select_dtypes(include=np.number))
+            df_bench["anomaly"] = model.predict(df_bench.select_dtypes(include=np.number))
+            anomalies = len(df_bench[df_bench["anomaly"] == -1])
+            total = len(df_bench)
+            top_users = df_bench[df_bench["anomaly"] == -1]["username"].value_counts().head(1)
+            summary_rows.append({
+                "File": file_id.split("__")[0],
+                "Total Logs": total,
+                "Anomalies": anomalies,
+                "Top Suspicious User": top_users.index[0] if not top_users.empty else "N/A"
+            })
+
+        summary_df = pd.DataFrame(summary_rows)
+        st.dataframe(summary_df)
+
+        st.subheader("📉 Anomalies per File")
+        fig, ax = plt.subplots()
+        ax.bar(summary_df["File"], summary_df["Anomalies"], color='red')
+        ax.set_ylabel("Anomaly Count")
+        ax.set_xlabel("File")
+        ax.set_title("Detected Anomalies per Log File")
+        plt.xticks(rotation=30)
+        st.pyplot(fig)
+
+        if st.button("🔁 Exit Benchmark Mode"):
+            del st.session_state["benchmark_mode"]
+            st.experimental_rerun()
+        st.stop()
+
+    # UPLOAD or SELECT SINGLE FILE
     uploaded_file = st.file_uploader("📤 Upload CSV File", type=["csv"])
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         save_to_history(df, uploaded_file.name)
         st.success(f"✅ '{uploaded_file.name}' uploaded and saved.")
-    elif selected_log:
+    elif not df and not uploaded_file:
+        for file_id, _, _ in history:
+            selected_log = file_id
+            break
+    if selected_log:
         df = load_history_df(selected_log)
         st.info(f"📁 Loaded: {selected_log.split('__')[0]}")
     else:
         df = None
 
-    # Process selected or uploaded DataFrame
+    # MAIN ANALYSIS VIEW
     if df is not None:
         st.subheader("📄 Uploaded Data")
         st.dataframe(df)
