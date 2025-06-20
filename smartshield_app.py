@@ -19,14 +19,15 @@ st.set_page_config(page_title="SmartShield IDS", layout="wide")
 HISTORY_DIR = "history"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 
-def save_to_history(df, title=None):
+def save_to_history(df, original_filename):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_id = title or f"log_{timestamp}"
+    file_id = f"{original_filename}__{timestamp}"
     csv_path = os.path.join(HISTORY_DIR, f"{file_id}.csv")
     json_path = os.path.join(HISTORY_DIR, f"{file_id}.json")
     df.to_csv(csv_path, index=False)
     metadata = {
-        "title": file_id,
+        "display_name": original_filename,
+        "file_id": file_id,
         "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "record_count": len(df)
     }
@@ -39,8 +40,8 @@ def list_saved_histories():
         if file.endswith(".json"):
             with open(os.path.join(HISTORY_DIR, file), "r") as f:
                 metadata = json.load(f)
-                items.append((file[:-5], metadata))
-    return sorted(items, key=lambda x: x[1]["uploaded_at"], reverse=True)
+                items.append((metadata["file_id"], metadata["display_name"], metadata))
+    return sorted(items, key=lambda x: x[2]["uploaded_at"], reverse=True)
 
 def load_history_df(file_id):
     return pd.read_csv(os.path.join(HISTORY_DIR, f"{file_id}.csv"))
@@ -123,7 +124,6 @@ authenticator = stauth.Authenticate(
     config["cookie"]["expiry_days"]
 )
 
-# ✅ Use compatible login syntax
 name, authentication_status, username = authenticator.login("Login", "main")
 
 # --- MAIN APP ---
@@ -133,41 +133,40 @@ if authentication_status:
 
     st.title("🔐 SmartShield – Intrusion Detection System")
 
-    # Sidebar: History
+    # Sidebar: History Viewer
     st.sidebar.markdown("### 🕓 History")
     history = list_saved_histories()
     selected_log = None
 
-    for file_id, meta in history:
+    for file_id, display_name, meta in history:
         col1, col2 = st.sidebar.columns([0.85, 0.15])
-        if col1.button(meta["title"], key=file_id):
+        if col1.button(f"📄 {display_name}", key=file_id):
             selected_log = file_id
-        if col2.button("⋮", key=file_id + "_opt"):
-            if st.sidebar.button(f"Delete {meta['title']}", key=file_id + "_del"):
-                delete_history_item(file_id)
-                st.experimental_rerun()
+        if col2.button("🗑️", key=file_id + "_del"):
+            delete_history_item(file_id)
+            st.experimental_rerun()
 
-    if history and st.sidebar.button("🗑️ Clear History"):
+    if history and st.sidebar.button("🧹 Clear History"):
         clear_history()
         st.experimental_rerun()
 
-    # Upload / Load logic
+    # Upload or Load
     uploaded_file = st.file_uploader("📤 Upload CSV File", type=["csv"])
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        save_to_history(df)
-        st.success("✅ File saved to history")
+        save_to_history(df, uploaded_file.name)
+        st.success(f"✅ '{uploaded_file.name}' uploaded and saved.")
     elif selected_log:
         df = load_history_df(selected_log)
-        st.info(f"📁 Loaded: {selected_log}")
+        st.info(f"📁 Loaded: {selected_log.split('__')[0]}")
     else:
         df = None
 
+    # Process selected or uploaded DataFrame
     if df is not None:
         st.subheader("📄 Uploaded Data")
         st.dataframe(df)
 
-        # Anomaly Detection
         with st.spinner("Analyzing with AI..."):
             model = IsolationForest(contamination=0.2, random_state=42)
             model.fit(df.select_dtypes(include=np.number))
@@ -180,7 +179,6 @@ if authentication_status:
         st.subheader("⚠️ Suspicious Entries")
         st.dataframe(df[df['anomaly_label'] == "⚠️ Suspicious"])
 
-        # Charts
         if st.checkbox("📈 Suspicion Score Over Time"):
             df['suspicion_score'] = df['bytes_sent'] + df['bytes_received']
             df['log_index'] = df.index
@@ -206,19 +204,16 @@ if authentication_status:
             ax3.pie(sizes, labels=labels, autopct='%1.1f%%', colors=['green', 'red'])
             st.pyplot(fig3)
 
-        # Live detection
         st.subheader("📡 Live Detection Simulation")
         for i in range(min(20, len(df))):
             log = df.iloc[i]
             st.write(f"👤 {log.get('username', 'Unknown')} | 🕒 {log['login_time']} | {log['anomaly_label']}")
             time.sleep(0.1)
 
-        # Download
         st.subheader("📥 Download Anomaly Report")
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button("Download CSV", csv, "anomaly_report.csv", "text/csv")
 
-        # Stats
         st.subheader("📊 Stats Overview")
         st.metric("🔍 Total Records", len(df))
         st.metric("⚠️ Anomalies", len(df[df['anomaly_label'] == "⚠️ Suspicious"]))
@@ -226,6 +221,5 @@ if authentication_status:
 
 elif authentication_status is False:
     st.error("❌ Incorrect username or password")
-
 elif authentication_status is None:
     st.warning("Please enter your credentials.")
