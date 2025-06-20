@@ -124,6 +124,7 @@ authenticator = stauth.Authenticate(
     config["cookie"]["expiry_days"]
 )
 
+st.subheader("🔐 Login to SmartShield")
 name, authentication_status, username = authenticator.login(location="main")
 
 # --- MAIN APP ---
