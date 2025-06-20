@@ -12,6 +12,20 @@ import os
 from datetime import datetime
 from yaml.loader import SafeLoader
 
+from cryptography.fernet import Fernet
+
+# Load or generate encryption key
+KEY_FILE = "secret.key"
+if not os.path.exists(KEY_FILE):
+    with open(KEY_FILE, "wb") as f:
+        f.write(Fernet.generate_key())
+
+with open(KEY_FILE, "rb") as f:
+    key = f.read()
+
+fernet = Fernet(key)
+
+
 # --- CONFIG ---
 st.set_page_config(page_title="SmartShield IDS", layout="wide")
 
