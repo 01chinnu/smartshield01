@@ -164,7 +164,7 @@ if authentication_status:
 
     if history and st.sidebar.button("🧹 Clear All History"):
         clear_history()
-        st.experimental_rerun()
+        st.rerun()
 
     # 🧪 Compare Logs
     if selected_logs and st.sidebar.button("📊 Compare Selected Logs"):
