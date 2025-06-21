@@ -1,4 +1,3 @@
-# --- Updated SmartShield Intrusion Detection System ---
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -14,9 +13,10 @@ from datetime import datetime
 from yaml.loader import SafeLoader
 from cryptography.fernet import Fernet
 
+# --- CONFIG ---
 st.set_page_config(page_title="SmartShield IDS", layout="wide")
 
-# --- ENCRYPTION SETUP ---
+# --- ENCRYPTION ---
 KEY_FILE = "secret.key"
 if not os.path.exists(KEY_FILE):
     with open(KEY_FILE, "wb") as f:
@@ -25,6 +25,7 @@ with open(KEY_FILE, "rb") as f:
     key = f.read()
 fernet = Fernet(key)
 
+# --- HISTORY ---
 HISTORY_DIR = "history"
 os.makedirs(HISTORY_DIR, exist_ok=True)
 
@@ -72,7 +73,7 @@ def clear_history():
     for file in os.listdir(HISTORY_DIR):
         os.remove(os.path.join(HISTORY_DIR, file))
 
-# --- USER AUTHENTICATION ---
+# --- USER AUTH & SIGNUP ---
 def register_user():
     st.subheader("📝 Sign Up")
     new_name = st.text_input("Full Name")
@@ -112,7 +113,7 @@ if st.session_state.signup_mode:
     register_user()
     st.stop()
 
-# --- LOGIN ---
+# --- LOGIN SETUP ---
 if os.path.exists("users.json"):
     with open("users.json", "r") as f:
         user_data = json.load(f)
@@ -147,25 +148,29 @@ if authentication_status:
     authenticator.logout("Logout", "sidebar")
     st.title("🔐 SmartShield – Intrusion Detection System")
 
+    # --- SIDEBAR HISTORY + BENCHMARK SELECT ---
     history = list_saved_histories()
     selected_log = None
     selected_logs = []
 
     st.sidebar.markdown("### 🕓 History (Select to Compare)")
     for file_id, display_name, meta in history:
-        if st.sidebar.checkbox(display_name, key=f"check_{file_id}"):
+        checkbox_key = f"check_{file_id}"
+        if st.sidebar.checkbox(display_name, key=checkbox_key):
             selected_logs.append(file_id)
         if st.sidebar.button(f"🗑️ Delete {display_name}", key=file_id + "_del"):
             delete_history_item(file_id)
-            st.rerun()
+            st.experimental_rerun()
 
     if history and st.sidebar.button("🧹 Clear All History"):
         clear_history()
         st.rerun()
 
+    # 🧪 Compare Logs
     if selected_logs and st.sidebar.button("📊 Compare Selected Logs"):
         st.session_state["benchmark_mode"] = selected_logs
 
+    # 🧪 BENCHMARK MODE
     if "benchmark_mode" in st.session_state:
         selected_ids = st.session_state["benchmark_mode"]
         st.subheader("📊 Benchmark Mode – Log Comparison")
@@ -173,14 +178,12 @@ if authentication_status:
         summary_rows = []
         for file_id in selected_ids:
             df_bench = load_history_df(file_id)
-            df_num = df_bench.select_dtypes(include=np.number).dropna()
-            model = IsolationForest(contamination='auto', random_state=42)
-            model.fit(df_num)
-            scores = model.decision_function(df_num)
-            threshold = np.percentile(scores, 15)
-            anomalies = (scores < threshold).sum()
+            model = IsolationForest(contamination=0.2, random_state=42)
+            model.fit(df_bench.select_dtypes(include=np.number))
+            df_bench["anomaly"] = model.predict(df_bench.select_dtypes(include=np.number))
+            anomalies = len(df_bench[df_bench["anomaly"] == -1])
             total = len(df_bench)
-            top_users = df_bench.iloc[scores.argsort()[:anomalies]]["username"].value_counts().head(1)
+            top_users = df_bench[df_bench["anomaly"] == -1]["username"].value_counts().head(1)
             summary_rows.append({
                 "File": file_id.split("__")[0],
                 "Total Logs": total,
@@ -188,68 +191,91 @@ if authentication_status:
                 "Top Suspicious User": top_users.index[0] if not top_users.empty else "N/A"
             })
 
-        st.dataframe(pd.DataFrame(summary_rows))
+        summary_df = pd.DataFrame(summary_rows)
+        st.dataframe(summary_df)
+
+        st.subheader("📉 Anomalies per File")
+        fig, ax = plt.subplots()
+        ax.bar(summary_df["File"], summary_df["Anomalies"], color='red')
+        ax.set_ylabel("Anomaly Count")
+        ax.set_xlabel("File")
+        ax.set_title("Detected Anomalies per Log File")
+        plt.xticks(rotation=30)
+        st.pyplot(fig)
 
         if st.button("🔁 Exit Benchmark Mode"):
             del st.session_state["benchmark_mode"]
-            st.rerun()
+            st.experimental_rerun()
         st.stop()
 
-    uploaded_file = st.file_uploader("📤 Upload CSV File", type=["csv"])
+    # UPLOAD or SELECT SINGLE FILE
+    # Initialize df
     df = None
+    
+    # UPLOAD or SELECT SINGLE FILE
+    uploaded_file = st.file_uploader("📤 Upload CSV File", type=["csv"])
+    
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         save_to_history(df, uploaded_file.name)
         st.success(f"✅ '{uploaded_file.name}' uploaded and saved.")
-    elif not uploaded_file and history:
-        selected_log = history[0][0]
+    elif df is None and not uploaded_file:
+        for file_id, _, _ in history:
+            selected_log = file_id
+            break
+
+    if selected_log:
         df = load_history_df(selected_log)
         st.info(f"📁 Loaded: {selected_log.split('__')[0]}")
+    else:
+        df = None
 
+    # MAIN ANALYSIS VIEW
     if df is not None:
         st.subheader("📄 Uploaded Data")
         st.dataframe(df)
 
-        with st.spinner("Analyzing with adaptive ML model..."):
-            df_num = df.select_dtypes(include=np.number).dropna()
-            model = IsolationForest(contamination='auto', random_state=42)
-            model.fit(df_num)
-            scores = model.decision_function(df_num)
-            threshold = np.percentile(scores, 15)
-            df['anomaly_score'] = scores
-            df['anomaly'] = (scores < threshold).astype(int)
-            df['anomaly_label'] = df['anomaly'].map({0: "✅ Normal", 1: "⚠️ Suspicious"})
+        with st.spinner("Analyzing with AI..."):
+            model = IsolationForest(contamination=0.2, random_state=42)
+            model.fit(df.select_dtypes(include=np.number))
+            df['anomaly'] = model.predict(df.select_dtypes(include=np.number))
+            df['anomaly_label'] = df['anomaly'].map({1: "✅ Normal", -1: "⚠️ Suspicious"})
 
         st.subheader("📊 Detection Results")
         st.dataframe(df)
 
         st.subheader("⚠️ Suspicious Entries")
-        st.dataframe(df[df['anomaly'] == 1])
+        st.dataframe(df[df['anomaly_label'] == "⚠️ Suspicious"])
 
         if st.checkbox("📈 Suspicion Score Over Time"):
+            df['suspicion_score'] = df['bytes_sent'] + df['bytes_received']
             df['log_index'] = df.index
             fig1, ax1 = plt.subplots()
-            ax1.plot(df['log_index'], df['anomaly_score'], color='orange')
+            ax1.plot(df['log_index'], df['suspicion_score'], color='orange')
             ax1.set_title("Suspicion Score Trend")
             st.pyplot(fig1)
 
-        if st.checkbox("📊 Show Anomalies by User") and 'username' in df.columns:
+        if st.checkbox("📊 Show Anomalies by User"):
             fig2, ax2 = plt.subplots(figsize=(12, 5))
-            sns.countplot(data=df[df['anomaly'] == 1], x='username', ax=ax2)
+            sns.countplot(data=df[df['anomaly_label'] == "⚠️ Suspicious"], x='username', ax=ax2)
             ax2.set_title("Suspicious Activity by User")
             plt.xticks(rotation=45)
             st.pyplot(fig2)
 
         if st.checkbox("🥧 Show Normal vs Suspicious Distribution"):
             fig3, ax3 = plt.subplots()
-            sizes = df['anomaly'].value_counts(sort=False)
-            ax3.pie(sizes, labels=['Normal', 'Suspicious'], autopct='%1.1f%%', colors=['green', 'red'])
+            labels = ['Normal', 'Suspicious']
+            sizes = [
+                len(df[df['anomaly_label'] == "✅ Normal"]),
+                len(df[df['anomaly_label'] == "⚠️ Suspicious"])
+            ]
+            ax3.pie(sizes, labels=labels, autopct='%1.1f%%', colors=['green', 'red'])
             st.pyplot(fig3)
 
         st.subheader("📡 Live Detection Simulation")
         for i in range(min(20, len(df))):
             log = df.iloc[i]
-            st.write(f"👤 {log.get('username', 'Unknown')} | 🕒 {log.get('login_time', '-') } | {log['anomaly_label']}")
+            st.write(f"👤 {log.get('username', 'Unknown')} | 🕒 {log['login_time']} | {log['anomaly_label']}")
             time.sleep(0.1)
 
         st.subheader("📥 Download Anomaly Report")
@@ -258,10 +284,10 @@ if authentication_status:
 
         st.subheader("📊 Stats Overview")
         st.metric("🔍 Total Records", len(df))
-        st.metric("⚠️ Anomalies", df['anomaly'].sum())
-        st.metric("✅ Normal", len(df) - df['anomaly'].sum())
+        st.metric("⚠️ Anomalies", len(df[df['anomaly_label'] == "⚠️ Suspicious"]))
+        st.metric("✅ Normal", len(df[df['anomaly_label'] == "✅ Normal"]))
 
 elif authentication_status is False:
     st.error("❌ Incorrect username or password")
 elif authentication_status is None:
-    st.warning("Please enter your credentials.")
+    st.warning("Please enter your credentials.") 
