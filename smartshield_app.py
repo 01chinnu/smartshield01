@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import IsolationForest
 import streamlit_authenticator as stauth
-import yaml
 import json
 import os
 from datetime import datetime
