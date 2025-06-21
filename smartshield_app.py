@@ -209,15 +209,21 @@ if authentication_status:
         st.stop()
 
     # UPLOAD or SELECT SINGLE FILE
+    # Initialize df
+    df = None
+    
+    # UPLOAD or SELECT SINGLE FILE
     uploaded_file = st.file_uploader("📤 Upload CSV File", type=["csv"])
+    
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
         save_to_history(df, uploaded_file.name)
         st.success(f"✅ '{uploaded_file.name}' uploaded and saved.")
-    elif not df and not uploaded_file:
+    elif df is None and not uploaded_file:
         for file_id, _, _ in history:
             selected_log = file_id
             break
+
     if selected_log:
         df = load_history_df(selected_log)
         st.info(f"📁 Loaded: {selected_log.split('__')[0]}")
